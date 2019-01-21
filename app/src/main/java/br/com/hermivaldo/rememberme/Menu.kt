@@ -45,7 +45,6 @@ class Menu : AppCompatActivity(), DatePickerDialog.OnDateSetListener {
     }
 
     fun salvar(view: View){
-
         Observable.fromCallable({
             memoryDAO?.insert(mMemory!!)
         }).subscribeOn(Schedulers.io())
@@ -69,7 +68,6 @@ class Menu : AppCompatActivity(), DatePickerDialog.OnDateSetListener {
                 this.mMemory?.audio = data?.getStringExtra("AUDIO")!!
                 cAudio.text = this.mMemory?.audio
             }
-
         }
     }
 
