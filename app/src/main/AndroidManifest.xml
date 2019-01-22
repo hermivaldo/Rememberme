@@ -20,7 +20,6 @@
             </intent-filter>
         </activity>
         <activity android:name=".Record" />
-        <activity android:name=".Menu" />
     </application>
 
 </manifest>
