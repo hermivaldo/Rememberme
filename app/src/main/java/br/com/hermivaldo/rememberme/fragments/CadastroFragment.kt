@@ -1,12 +1,19 @@
 package br.com.hermivaldo.rememberme.fragments
 
 
-import android.app.DatePickerDialog
 import android.app.DatePickerDialog.OnDateSetListener
 import android.content.Intent
 import android.databinding.DataBindingUtil
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
+import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
 import android.support.v4.app.Fragment
+import android.support.v4.content.FileProvider
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -24,10 +31,33 @@ import com.android.databinding.library.baseAdapters.BR
 import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.schedulers.Schedulers
+import kotlinx.android.synthetic.main.fragment_cadastro.*
+import java.io.File
+import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.*
 
 private const val REQUEST_AUDIO_RECORD = 200
+val REQUEST_IMAGE_CAPTURE = 1
 
 class CadastroFragment : Fragment(), OnDateSetListener{
+
+    var mCurrentPath: String? = null
+    private var db: AppDataBase? = null
+    private var memoryDAO: MemoryDAO? = null
+    private var mMemory: Memory? = null
+    private var inflate : FragmentCadastroBinding? = null
+
+
+    @Throws(IOException::class)
+    private fun createImage() : File{
+        var timeStamp: String = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
+        val storageDir: File = this.activity!!.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+
+        return File.createTempFile("JPEG_${timeStamp}","jpg", storageDir).apply {
+            mCurrentPath =  absolutePath
+        }
+    }
 
     override fun onDateSet(view: DatePicker?, year: Int, month: Int, dayOfMonth: Int) {
        this.mMemory?.dEscolhida = ""+ dayOfMonth + "/" + (month + 1) + "/" + year
@@ -35,11 +65,6 @@ class CadastroFragment : Fragment(), OnDateSetListener{
        inflate!!.setVariable(BR.memory, mMemory)
        inflate!!.executePendingBindings()
     }
-
-    private var db: AppDataBase? = null
-    private var memoryDAO: MemoryDAO? = null
-    private var mMemory: Memory? = null
-    private var inflate : FragmentCadastroBinding? = null
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?,
                               savedInstanceState: Bundle?): View? {
@@ -52,9 +77,11 @@ class CadastroFragment : Fragment(), OnDateSetListener{
         inflate!!.setVariable(BR.memory, mMemory)
         inflate!!.executePendingBindings()
 
-        root.findViewById<Button>(R.id.btnAudio).setOnClickListener({it -> gravarAudio(it)})
-        root.findViewById<Button>(R.id.btnData).setOnClickListener({it -> showDatePickerDialog(it)})
-        root.findViewById<Button>(R.id.btnSalvar).setOnClickListener({it -> salvar(it)})
+        root.findViewById<Button>(R.id.btnAudio).setOnClickListener({it -> gravarAudio()})
+        root.findViewById<Button>(R.id.btnData).setOnClickListener({it -> showDatePickerDialog()})
+        root.findViewById<Button>(R.id.btnSalvar).setOnClickListener({it -> salvar()})
+        root.findViewById<Button>(R.id.btnFoto).setOnClickListener({it -> tirarFoto()})
+
         return root
     }
 
@@ -68,7 +95,7 @@ class CadastroFragment : Fragment(), OnDateSetListener{
 
     }
 
-    fun salvar(view: View){
+    fun salvar(){
         Observable.fromCallable({
             memoryDAO?.insert(mMemory!!)
         }).subscribeOn(Schedulers.io())
@@ -81,8 +108,78 @@ class CadastroFragment : Fragment(), OnDateSetListener{
 
     }
 
-    fun gravarAudio(view: View){
+    fun gravarAudio(){
         startActivityForResult( Intent(this.context, Record::class.java), REQUEST_AUDIO_RECORD)
+    }
+
+    fun tirarFoto(){
+        Intent(MediaStore.ACTION_IMAGE_CAPTURE).also {
+            takePicture -> takePicture.resolveActivity(this.context!!.packageManager)?.also {
+
+                var photoFile: File? = try {
+                    createImage()
+                }catch (ex: IOException){
+
+                    null
+                }
+
+                photoFile?.also {
+                    val photoURI: Uri? = FileProvider.getUriForFile(
+                            this.context!!,
+                            "com.example.android.fileprovider",
+                            it
+                    )
+                    takePicture.putExtra(MediaStore.EXTRA_OUTPUT, photoURI)
+                    startActivityForResult(takePicture, REQUEST_IMAGE_CAPTURE)
+                }
+            }
+        }
+    }
+
+
+    private fun setPic(){
+        val targetW: Int = mImageView.width
+        val targetH: Int = mImageView.height
+
+        val bmOptions =  BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+            BitmapFactory.decodeFile(mCurrentPath, this)
+            val photoW = outWidth
+            val protoH = outHeight
+
+            val scaleFactory = Math.min(photoW/ targetW, protoH / targetH)
+
+            inJustDecodeBounds = false
+            inSampleSize = scaleFactory
+            //inPurgeable = true
+
+
+        }
+
+        BitmapFactory.decodeFile(mCurrentPath, bmOptions)?.also { bitmap ->
+            val ei = ExifInterface(mCurrentPath)
+            val orientation = ei.getAttributeInt(ExifInterface.TAG_ORIENTATION,ExifInterface.ORIENTATION_UNDEFINED)
+            var mBitmap = bitmap
+            when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> {
+                    mBitmap = rotate(bitmap, 90f)
+                }
+                ExifInterface.ORIENTATION_ROTATE_180 ->{
+                    mBitmap = rotate(bitmap, 180f)
+                }
+                ExifInterface.ORIENTATION_ROTATE_270 -> {
+                    mBitmap = rotate(bitmap, 270f)
+                }
+            }
+
+            mImageView.setImageBitmap(mBitmap)
+        }
+    }
+
+    fun rotate(source: Bitmap, angle: Float): Bitmap{
+        val matrix = Matrix()
+        matrix.postRotate(angle)
+        return Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -93,10 +190,13 @@ class CadastroFragment : Fragment(), OnDateSetListener{
                 inflate!!.setVariable(BR.memory, mMemory)
                 inflate!!.executePendingBindings()
             }
+            REQUEST_IMAGE_CAPTURE -> {
+               setPic()
+            }
         }
     }
 
-    fun showDatePickerDialog(v: View) {
+    fun showDatePickerDialog() {
         val newFragment = br.com.hermivaldo.rememberme.fragments.DatePicker()
         newFragment.show(this.activity!!.supportFragmentManager, "datePicker")
     }
