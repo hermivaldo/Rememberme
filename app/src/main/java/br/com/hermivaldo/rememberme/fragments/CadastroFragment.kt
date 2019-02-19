@@ -8,6 +8,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.media.ExifInterface
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
@@ -20,6 +21,7 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.DatePicker
 import android.widget.Toast
+import android.widget.VideoView
 
 import br.com.hermivaldo.rememberme.R
 import br.com.hermivaldo.rememberme.Record
@@ -38,24 +40,30 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 private const val REQUEST_AUDIO_RECORD = 200
-val REQUEST_IMAGE_CAPTURE = 1
+const val REQUEST_IMAGE_CAPTURE = 1
+const val REQUEST_VIDEO_CAPTURE = 2
 
 class CadastroFragment : Fragment(), OnDateSetListener{
 
     var mCurrentPath: String? = null
+    var mCurrentPathCamera: String? = null
     private var db: AppDataBase? = null
     private var memoryDAO: MemoryDAO? = null
     private var mMemory: Memory? = null
     private var inflate : FragmentCadastroBinding? = null
 
 
+
     @Throws(IOException::class)
-    private fun createImage() : File{
+    private fun createPath(mPath: String, typeFile: String) : File{
         var timeStamp: String = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
         val storageDir: File = this.activity!!.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
 
-        return File.createTempFile("JPEG_${timeStamp}","jpg", storageDir).apply {
-            mCurrentPath =  absolutePath
+        return File.createTempFile("${mPath}_${timeStamp}", ".${typeFile}", storageDir).apply {
+            when (typeFile){
+                "jpg" -> mCurrentPath = absolutePath
+                "mp4" -> mCurrentPathCamera = absolutePath
+            }
         }
     }
 
@@ -64,6 +72,13 @@ class CadastroFragment : Fragment(), OnDateSetListener{
 
        inflate!!.setVariable(BR.memory, mMemory)
        inflate!!.executePendingBindings()
+    }
+
+    fun playVideo(v: View){
+        var videoView = v as VideoView
+
+        videoView.setVideoURI(Uri.parse(mCurrentPathCamera))
+        videoView.start()
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?,
@@ -81,7 +96,8 @@ class CadastroFragment : Fragment(), OnDateSetListener{
         root.findViewById<Button>(R.id.btnData).setOnClickListener({it -> showDatePickerDialog()})
         root.findViewById<Button>(R.id.btnSalvar).setOnClickListener({it -> salvar()})
         root.findViewById<Button>(R.id.btnFoto).setOnClickListener({it -> tirarFoto()})
-
+        root.findViewById<Button>(R.id.btnCamera).setOnClickListener({it -> gravarVideo()})
+        root.findViewById<VideoView>(R.id.vView).setOnClickListener { it ->  playVideo(it) }
         return root
     }
 
@@ -117,7 +133,7 @@ class CadastroFragment : Fragment(), OnDateSetListener{
             takePicture -> takePicture.resolveActivity(this.context!!.packageManager)?.also {
 
                 var photoFile: File? = try {
-                    createImage()
+                    createPath("JPEG", "jpg")
                 }catch (ex: IOException){
 
                     null
@@ -131,6 +147,30 @@ class CadastroFragment : Fragment(), OnDateSetListener{
                     )
                     takePicture.putExtra(MediaStore.EXTRA_OUTPUT, photoURI)
                     startActivityForResult(takePicture, REQUEST_IMAGE_CAPTURE)
+                }
+            }
+        }
+    }
+
+    fun gravarVideo(){
+        Intent(MediaStore.ACTION_VIDEO_CAPTURE).also {
+            recordVideo -> recordVideo.resolveActivity(this.context!!.packageManager)?.also {
+
+                var videoPath: File? = try {
+                    createPath("record", "mp4")
+                }catch (ex: IOException){
+                    null
+                }
+
+                videoPath?.also {
+                    var recordURI: Uri? = FileProvider.getUriForFile(
+                            this.context!!,
+                            "com.example.android.fileprovider",
+                            it
+                    )
+
+                    recordVideo.putExtra(MediaStore.EXTRA_OUTPUT, recordURI)
+                    startActivityForResult(recordVideo, REQUEST_VIDEO_CAPTURE)
                 }
             }
         }
@@ -192,6 +232,9 @@ class CadastroFragment : Fragment(), OnDateSetListener{
             }
             REQUEST_IMAGE_CAPTURE -> {
                setPic()
+            }
+            REQUEST_VIDEO_CAPTURE -> {
+
             }
         }
     }

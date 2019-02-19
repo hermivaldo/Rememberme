@@ -10,12 +10,17 @@ import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
+import android.os.Environment
 import android.support.v4.app.ActivityCompat
 import android.util.Log
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
+import java.io.File
+import java.io.IOException
 import java.lang.Exception
+import java.text.SimpleDateFormat
+import java.util.*
 
 private const val LOG_TAG = "Record"
 private const val REQUEST_RECORD_AUDIO_PERMISSION = 200
@@ -94,9 +99,19 @@ class Record : AppCompatActivity() {
         stopRecording()
     }
 
+    @Throws(IOException::class)
+    private fun createPath(prefix: String, typeFile: String) : File {
+        var timeStamp: String = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
+        val storageDir: File = this.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+
+        return File.createTempFile("${prefix}_${timeStamp}", ".${typeFile}", storageDir).apply {
+            mFileName = absolutePath
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        mFileName = "${externalCacheDir.absolutePath}/audiorecordtest.3gp"
+        createPath("record", "3gp")
 
         ActivityCompat.requestPermissions(this, permissions, REQUEST_RECORD_AUDIO_PERMISSION)
 
